@@ -1,0 +1,238 @@
+---
+title: "Project"
+author: "Jorge Mendez-Benegassi"
+date: "2023-04-04"
+output: html_document
+---
+
+## R Markdown
+
+```{r}
+library(ggplot2)
+
+setwd("C:/Users/ferna/OneDrive - Universidad Politécnica de Madrid/IIT/Spring Semester/Data Preparation and Analysis/Project/")
+
+# Load dataset
+df <- read.csv("C:/Users/ferna/OneDrive - Universidad Politécnica de Madrid/IIT/Spring Semester/Data Preparation and Analysis/Project/heart_data.csv")
+
+df$age_years <- round(df$age / 365, 2)
+
+df <- subset(df, select = -c(age, index, id))
+
+missing_values <- sum(is.na(df))
+paste("There are", missing_values, "missing values in the dataset.")
+
+duplicate_rows <- duplicated(df)
+
+# Subset the dataset into another with the duplicated rows
+duplicate_df <- df[duplicate_rows,]
+num_duplicates <- nrow(duplicate_df)
+paste("There are", num_duplicates, "duplicates in the dataset.")
+
+# Find outliers / noisy data in numerical (non-binary) features
+# We first modify the variable "cardio" to be a categorical variable with two levels
+df$cardio <- factor(df$cardio, levels = c(0, 1), labels = c("No", "Yes"))
+
+# We extract the boxplot of the non-binary or non-level features
+ggplot(data=df, aes(x=cardio, y=age_years, fill=cardio)) +
+  geom_boxplot() +
+  ggtitle("Boxplot of Age by Cardio Status")
+
+ggplot(data=df, aes(x=cardio, y=height, fill=cardio)) +
+  geom_boxplot() +
+  ggtitle("Boxplot of Height by Cardio Status")
+
+ggplot(data=df, aes(x=cardio, y=weight, fill=cardio)) +
+  geom_boxplot() +
+  ggtitle("Boxplot of Weight by Cardio Status")
+
+ggplot(data=df, aes(x=cardio, y=ap_hi, fill=cardio)) +
+  geom_boxplot() +
+  ggtitle("Boxplot of Systolic Blood Pressure by Cardio Status")
+
+ggplot(data=df, aes(x=cardio, y=ap_lo, fill=cardio)) +
+  geom_boxplot() +
+  ggtitle("Boxplot of Diastolic Blood Pressure by Cardio Status")
+
+```
+
+### Outliers
+```{r}
+cat("To find anomalies, we can visually examine the boxplots and look for any data points that fall far outside the whiskers. Additionally, we can use the 'summary' function to calculate basic descriptive statistics and identify any unusual values.")
+
+cat("There are no anomalies for the feature age.")
+cat("There are anomalies for the feature height.")
+cat("There are anomalies for the feature weight.")
+cat("There are anomalies for the feature ap_hi.")
+cat("There are anomalies for the feature ap_lo.")
+
+iqr_height <- IQR(df$height)
+iqr_weight <- IQR(df$weight)
+
+paste("We may consider outliers of the features height and weight to any data point that falls more than 1.5 times the IQR below the first quartile or above the third quartile, being", iqr_height, "and", iqr_weight, "the IQR values respectively. However, following this method we find height values such as 187 cm considered outliers, therefore, it is better to consider weight and height outliers to those values with no sense with respect to the age. In this way, we will first see the distribution of height and weight values with respect to the age and extract conclusions.")
+
+# To find outliers in height feature we are going to plot a scatter between age and height:
+# Create scatter plot
+plot(df$age_years, df$height)
+
+min_age <- min(df$age_years)
+max_age <- max(df$age_years)
+paste("Since we have ages between", min_age, "and", max_age,", we will consider height outliers to any data point that falls out of the normal height values (range [130, 210]).")
+
+# Rows with height values outside the range (outliers)
+height_outliers <- df$height < 130 | df$height > 210
+
+# Remove those rows
+df <- df[!height_outliers, ]
+
+# Scatter plot without those outliers
+plot(df$age_years, df$height)
+
+# To find outliers in weight feature we are going to plot a scatter between age and weight:
+# Create scatter plot
+plot(df$age_years, df$weight)
+
+cat("As we can see in the scatter plot, there are no significant outliers according to the weight. There might be some high values but it can be related to obese individuals. This is a relevant factor for cardiovascular desease prediction, therefore, we won't remove any weight value.")
+
+cat("We consider outliers of the feature ap_hi (systolic) to those values higher than 180 mmHg which would correspond to a stage of hypertensive crisis, requiring immediate medical attention")
+
+# Rows with ap_hi (systolic) values outside the range (outliers)
+aphi_outliers <- df$ap_hi > 180
+df <- df[!aphi_outliers, ]
+
+cat("We consider outliers of the feature ap_lo (diastolic) to those values higher than 120 mmHg which would correspond to a stage of hypertensive crisis, requiring immediate medical attention.")
+
+# Rows with ap_lo (diastolic) values outside the range (outliers)
+aplo_outliers <- df$ap_lo > 120
+df <- df[!aplo_outliers, ]
+```
+
+
+### Data reduction
+```{r}
+cat("We have reduced our dataset from 14 features to 12, and from 70000 observations to 68561.")
+
+```
+
+### Data transformation
+```{r}
+cat("We have alreay transform the age feature so that it gives us the information in years instead of days. Moreover, the target 'cardio' feature has been modified to become a categorical variable with two levels: Yes / No.")
+
+# We transform the feature gender to be binary (1->0 and 2->1)
+df$gender <- ifelse(df$gender == 1, 0, 1)
+
+# We transform the categorical features cholesterol, gluc from 1 to 0, from 2 to 1, and from 3 to 2
+df$cholesterol <- ifelse(df$cholesterol == 1, 0,
+                         ifelse(df$cholesterol == 2, 1, 2))
+df$gluc <- ifelse(df$gluc == 1, 0,
+                         ifelse(df$gluc == 2, 1, 2))
+cat("For convenience, we are going to change the order of the features so that the target is last.")
+
+library(dplyr)
+df <- select(df, gender, height, weight, ap_hi, ap_lo, cholesterol, gluc, smoke, alco, active, age_years, cardio)
+
+cat("At this point we have five integer features corresponding to: age_years, height, weight, ap_hi, and ap_lo; four binary features corresponding to: gender, smoke, alco, and active; two categorical features with levels 0, 1, and 2, corresponding to: cholesterol and gluc; and the target feature which is categorical (yes, no): cardio.")
+
+```
+##### Discretization and normalization
+```{r}
+cat("It is necessary to transform all categorical values to factors for future model implementation. This includes binary attributes.")
+
+df$gender = factor(df$gender)
+df$cholesterol = factor(df$cholesterol)
+df$gluc = factor(df$gluc)
+df$smoke = factor(df$smoke)
+df$alco = factor(df$alco)
+df$active = factor(df$active)
+```
+
+### Statistics
+#### Repartition statistics of features
+#### Statistics of categorical features
+```{r}
+summary_data <- summary(df)
+smokers <- sum(df$smoke == 1)
+percentage_smokers <- smokers*100/nrow(df)
+cat("The percentage of smokers is",percentage_smokers)
+alcohol <- sum(df$alco == 1)
+percentage_alcohol <- alcohol*100/nrow(df)
+cat("\nThe percentage of individuals whose drinks alcohol is",percentage_alcohol)
+men <- sum(df$gender == 1)
+cat("\nThe number of men's individuals is", men)
+women <- sum(df$gender == 0)
+cat("\nThe number of women's individuals is", women)
+gluc_normal <- sum(df$gluc == 0)
+cat("\nThe number of individuals which glucose level is normal", gluc_normal)
+cat("\nThe percentage of individuals which glucose level is normal",gluc_normal*100/nrow(df))
+gluc_above <- sum(df$gluc == 1)
+cat("\nThe number of individuals which glucose level is above average", gluc_above)
+cat("\nThe percentage of individuals which glucose level is above average",gluc_above*100/nrow(df))
+gluc_wellAbove <- sum(df$gluc == 2)
+cat("\nThe number of individuals which glucose level is well above normal", gluc_wellAbove)
+cat("\nThe percentage of individuals which glucose level is  well above normal",gluc_wellAbove*100/nrow(df))
+```
+
+```{r}
+chol_normal <- sum(df$cholesterol == 0)
+cat("\nThe number of individuals which cholesterol level is normal", chol_normal)
+cat("\nThe percentage of individuals which cholesterol level is normal",chol_normal*100/nrow(df))
+chol_above <- sum(df$cholesterol == 1)
+cat("\nThe number of individuals which cholesterol level is above average", chol_above)
+cat("\nThe percentage of individuals which cholesterol level is above average",chol_above*100/nrow(df))
+chol_wellAbove <- sum(df$cholesterol == 2)
+cat("\nThe number of individuals which cholesterol level is well above normal", chol_wellAbove)
+cat("\nThe percentage of individuals which cholesterol level is  well above normal",chol_wellAbove*100/nrow(df))
+```
+
+```{r}
+chol_percentages <- c(chol_normal*100/nrow(df),chol_above*100/nrow(df),chol_wellAbove*100/nrow(df))
+labels <- c("Normal","Above normal","Well above normal", main = "Choresterol chart")
+pie(chol_percentages, labels = labels)
+gluc_percentages <- c(gluc_normal*100/nrow(df),gluc_above*100/nrow(df),gluc_wellAbove*100/nrow(df))
+labels <- c("Normal","Above normal","Well above normal")
+pie(gluc_percentages, labels = labels, main = "Glucose chart")
+```
+#### Statistics of continuous features
+```{r}
+min_weight <- min(df$weight)
+min_height <- min(df$height)
+min_age_years <- min(df$age_years)
+max_weight <- max(df$weight)
+max_height <- max(df$height)
+max_age_years <- max(df$age_years)
+mean_weight <- mean(df$weight)
+mean_height <- mean(df$height)
+mean_age_years <- mean(df$age_years)
+```
+
+```{r}
+library(knitr)
+stats_mat <- matrix(c(
+  round(min_weight,2), round(mean_weight,2), round(max_weight,2),
+  round(min_height,2), round(mean_height,2), round(max_height,2),
+  round(min_age_years,2), round(mean_age_years,2), round(max_age_years,2)
+), nrow = 3, byrow = TRUE, dimnames = list(
+  c("Weight", "Height", "Age"),
+  c("Minimum", "Mean", "Max")
+))
+stats_df <- as.data.frame(stats_mat)
+kable(stats_df, format = "markdown")
+```
+
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
